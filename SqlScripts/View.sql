@@ -23,11 +23,15 @@ SELECT
 	Consultant.OfficeID, 
 	Consultant.GradeID, 
 	Consultant.MentorID, 
+
+--Full name of the consultant
 	CONCAT(Consultant.FirstName, '', Consultant.LastName) AS FullName, 
 	Grade.GradeName, 
 	Grade.AnnualSalary, 
 	Grade.MinimumExperience,
 	Office.OfficeName, 
+
+--Counts the total number of certification achieved by a consultant
 	COUNT(ConsultantCertification.CertificationID) AS TotalCertifications
 	
 FROM Consultant
@@ -46,8 +50,6 @@ GROUP BY
 	Grade.AnnualSalary,
 	Grade.MinimumExperience,
 	Office.OfficeName;
-
-
 
 GO
 
@@ -70,9 +72,54 @@ This requires multiple joins, and an outer join will be needed to ensure that al
 
 -- Write your Project View here
 
+SELECT
+	Project.ProjectID,       
+    Project.LeaderID,       
+    Project.CustomerID,      
+    Project.ServiceID,        
+    Project.RequestedTime,    
+    Project.CompletedTime,   
+    Project.AmountPaid,       
+    Project.IsHighPriority,
+	ServiceType.ServiceTypeName,
+
+--Full name of customer and consultant
+	CONCAT(Customer.CustomerFirstName, '', Customer.CustomerLastName) AS CustomerName,
+	CONCAT(Consultant.FirstName, '', Consultant.LastName) AS ConsultantName,
+
+--Returns 0 if the sum of minutes worked is 0
+	ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) AS TotalMinutes,
+
+--If the project is High Priority, then 1.25 will be multiplied and then the total cost will be rounded up
+	CASE 
+		WHEN Project.IsHighPriority = 'Y'
+		THEN CEILING((ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) / 15) * 1.25 * ServiceType.CostPer15Min)
+		ELSE CEILING((ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) / 15) * ServiceType.CostPer15Min)
+	END AS ProjectCost
 
 
+FROM Project
 
+JOIN Customer ON Project.CustomerID = Customer.CustomerID
+JOIN Consultant ON Consultant.ConsultantID = Project.LeaderID
+JOIN ServiceType ON Project.ServiceID = ServiceType.ServiceID
+LEFT JOIN ProjectConsultant ON Project.ProjectID = ProjectConsultant.ProjectID
+
+GROUP BY
+    Project.ProjectID,
+    Project.LeaderID,
+    Project.CustomerID,
+    Project.ServiceID,
+    Project.RequestedTime,
+    Project.CompletedTime,
+    Project.IsHighPriority,
+    Customer.CustomerFirstName,
+    Customer.CustomerLastName,
+    Consultant.FirstName,
+    Consultant.LastName,
+    ServiceType.ServiceTypeName,
+    ServiceType.CostPer15Min,
+    Project.AmountPaid;
 
 GO
 
