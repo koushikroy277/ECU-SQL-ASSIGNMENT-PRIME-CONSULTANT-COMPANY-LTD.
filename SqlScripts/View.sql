@@ -1,6 +1,6 @@
--- Student Number(s): 10728833	
--- Student Name(s):	Koushik Roy	
-
+-- Student Number(s): 10728833, 10729655	
+-- Student Name(s):	Koushik Roy, Isha Modi	
+--done
 USE primeConsulting;
 GO
 
@@ -17,15 +17,16 @@ GO
 */
 
 -- Write your Consultant View here
-
+CREATE VIEW ConsultantView AS
 SELECT 
 	Consultant.ConsultantID, 
 	Consultant.OfficeID, 
 	Consultant.GradeID, 
-	Consultant.MentorID, 
+	Consultant.MentorID,
+	Consultant.HireDate,
 
 --Full name of the consultant
-	CONCAT(Consultant.FirstName, '', Consultant.LastName) AS FullName, 
+	CONCAT(Consultant.FirstName, ' ', Consultant.LastName) AS FullName, 
 	Grade.GradeName, 
 	Grade.AnnualSalary, 
 	Grade.MinimumExperience,
@@ -46,6 +47,7 @@ GROUP BY
 	Consultant.MentorID,
 	Consultant.FirstName,
 	Consultant.LastName,
+	Consultant.HireDate,
 	Grade.GradeName,
 	Grade.AnnualSalary,
 	Grade.MinimumExperience,
@@ -70,8 +72,9 @@ This requires multiple joins, and an outer join will be needed to ensure that al
 
 */
 
--- Write your Project View here
 
+-- Write your Project View here
+CREATE VIEW ProjectView AS
 SELECT
 	Project.ProjectID,       
     Project.LeaderID,       
@@ -83,20 +86,30 @@ SELECT
     Project.IsHighPriority,
 	ServiceType.ServiceTypeName,
 
---Full name of customer and consultant
-	CONCAT(Customer.CustomerFirstName, '', Customer.CustomerLastName) AS CustomerName,
-	CONCAT(Consultant.FirstName, '', Consultant.LastName) AS ConsultantName,
+--Full name of customer and consultant 
+	CONCAT(Customer.CustomerFirstName, ' ', Customer.CustomerLastName) AS CustomerName,
+	CONCAT(Consultant.FirstName, ' ', Consultant.LastName) AS ConsultantName,
 
 --Returns 0 if the sum of minutes worked is 0
 	ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) AS TotalMinutes,
 
+/* 
+	Got it from W3Schools as I was going through all the SQL contents and used it as it seemed more convenient to use than the normal IF statement 
+	and as the IF statement was mentioned less frequently in the lecture
+	source: https://www.w3schools.com/sql/sql_case.asp
+*/
+
 --If the project is High Priority, then 1.25 will be multiplied and then the total cost will be rounded up
 	CASE 
 		WHEN Project.IsHighPriority = 'Y'
-		THEN CEILING((ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) / 15) * 1.25 * ServiceType.CostPer15Min)
-		ELSE CEILING((ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) / 15) * ServiceType.CostPer15Min)
-	END AS ProjectCost
 
+		/*
+			CEILING rounds a numeric value up to the nearest integer.
+			source: https://learn.microsoft.com/en-us/sql/t-sql/functions/ceiling-transact-sql?view=sql-server-ver17
+		*/
+		THEN CEILING((ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) / 15.0) * 1.25 * ServiceType.CostPer15Min)
+		ELSE CEILING((ISNULL(SUM(ProjectConsultant.MinutesWorked), 0) / 15.0) * ServiceType.CostPer15Min)
+	END AS ProjectCost
 
 FROM Project
 
@@ -120,7 +133,6 @@ GROUP BY
     ServiceType.ServiceTypeName,
     ServiceType.CostPer15Min,
     Project.AmountPaid;
-
 GO
 
 --	If you wish to create additional views to use in the queries which follow, include them in this file.
