@@ -1,6 +1,6 @@
--- Student Number(s): 10728833	
--- Student Name(s):	Koushik Roy		
-
+-- Student Number(s): 10728833, 10729655	
+-- Student Name(s):	Koushik Roy, Isha Modi		
+--done
 USE primeConsulting;
 
 /*	Query 1 – Project Search (2 marks)
@@ -18,7 +18,6 @@ AND Project.CompletedTime IS NULL
 AND Project.AmountPaid > 0
 
 ORDER BY RequestedTime DESC;
-
 
 
 
@@ -44,7 +43,10 @@ FROM ConsultantView
 	EXPERIENCE THAN THE MINIMUM EXPERIENCE CRITERIA OF THE GRADE
 */
 
-WHERE DATEDIFF(year, ConsultantView.HireDate, GETDATE()) < ConsultantView.MinimumExperience 
+WHERE DATEADD(year, ConsultantView.MinimumExperience, 
+	ConsultantView.HireDate) > GETDATE()
+
+ORDER BY ConsultantView.FullName
 
 
 
@@ -92,7 +94,11 @@ SELECT
 	ConsultantView.FullName,
 	ConsultantView.OfficeName,
 
-	-- ONE PERSON MAY HAVE SEVERAL QUALIFICATIONS SO IT COMBINES ALL THE CERTIFICATION OF A SINGLE CONSULTANT INTO ONE ROW
+	--ONE PERSON MAY HAVE SEVERAL QUALIFICATIONS SO IT COMBINES ALL THE CERTIFICATION OF A SINGLE CONSULTANT INTO ONE ROW
+	/* 
+		Concatenates the values of string expressions and places separator values between them
+		source: https://learn.microsoft.com/en-us/sql/t-sql/functions/string-agg-transact-sql?view=sql-server-ver17
+	*/
 	STRING_AGG(Certification.CertificationName, ', ') 
 	WITHIN GROUP (ORDER BY Certification.CertificationName ASC) AS Certifications
 
@@ -133,12 +139,18 @@ SELECT
 	--Calculating the total time in minutes spent to complete the project
 	DATEDIFF(minute, ProjectView.RequestedTime, ProjectView.CompletedTime) AS TotalProjectMinutes,
 
-	--Calculating the efficiency
-	ROUND((ProjectView.TotalMinutes * 100 / DATEDIFF(minute, ProjectView.RequestedTime, ProjectView.CompletedTime)), 2) AS Efficiency
+	--Calculating the efficiency and cast was used to show values upto 2 digit from the decimal point
+	CAST(
+		ROUND((ProjectView.TotalMinutes * 100.0 / 
+		DATEDIFF(minute, ProjectView.RequestedTime, ProjectView.CompletedTime)), 2) 
+		
+		AS DECIMAL(10, 2)
+	)	
+	AS Efficiency
 
 FROM ProjectView
 WHERE ProjectView.CompletedTime IS NOT NULL
-ORDER BY Efficiency
+ORDER BY Efficiency DESC
 
 
 
@@ -163,10 +175,10 @@ SELECT
 
 	
 	--Calculating the total cost of projects done in that service category
-	SUM(ProjectView.ProjectCost) AS TotalProjectCost,
+	ROUND(SUM(ProjectView.ProjectCost), 0) AS TotalProjectCost,
 
 	--Calculating the average cost of the project
-	(SUM(ProjectView.ProjectCost) / COUNT(ProjectView.ServiceID)) AS AverageCost
+	ROUND((SUM(ProjectView.ProjectCost) / COUNT(ProjectView.ServiceID)), 0) AS AverageCost
 
 FROM ProjectView
 
@@ -194,8 +206,8 @@ FROM ConsultantView AS Consultant
 JOIN ConsultantView AS Mentor 
 	ON Consultant.MentorID = Mentor.ConsultantID
 
-WHERE Consultant.AnnualSalary < Mentor.AnnualSalary
-	  AND Consultant.OfficeID <> Mentor.OfficeID
+WHERE Consultant.AnnualSalary > Mentor.AnnualSalary
+	  OR Consultant.OfficeID <> Mentor.OfficeID
 
 GO
 
@@ -214,24 +226,25 @@ GO
 -- Write Query 8 here
 SELECT
 	CONCAT(
-		Office.OfficeName, ' is directed by ', 
+		Office.OfficeName, ' is managed by ', 
 		CONCAT(Director.FirstName, ' ', Director.LastName),
-		' has ',
+		',has ',
 
 		--Total number of consultants in the office branch
+		-- Distinct removes any duplicate value from the query
 		COUNT(DISTINCT Staff.ConsultantID),
 		' consultants ',
-		' has managed ',
+		',and has managed ',
 		
 		--Total number of projects done by the office branch
 		COUNT(DISTINCT Project.ProjectID),
-		' projects '
+		' projects. '
 	
 	) AS OfficeSummary
 
 FROM Office
 
-JOIN Consultant as Director 
+LEFT JOIN Consultant as Director 
 	ON Office.DirectorConsultantID = Director.ConsultantID
 LEFT JOIN Consultant AS Staff 
     ON Office.OfficeID = Staff.OfficeID
@@ -239,9 +252,11 @@ LEFT JOIN Project
 	ON Project.LeaderID = Staff.ConsultantID
 
 GROUP BY 
-Director.FirstName,
-Director.LastName,
-Office.OfficeName
+	Office.OfficeID,
+	Office.OfficeName,
+	Director.FirstName,
+	Director.LastName
+	
 
 ORDER BY
 Office.OfficeName ASC
@@ -262,21 +277,44 @@ GO
 -- Write Query 9 here
 
 SELECT
-	CONCAT(Consultant.FirstName, ' ', Consultant.LastName) AS FullName,
-	COUNT(Project.ProjectID) AS TotalProjects,
-	COUNT(Meeting.MeetingID) AS TotalMeetings,
-	ROUND(COUNT(Project.ProjectID) / COUNT(Meeting.MeetingID), 2) AS AverageMeeting
+	ConsultantView.FullName,
 
-FROM Consultant
-JOIN Project ON Project.LeaderID = Consultant.ConsultantID
-JOIN Meeting ON Project.ProjectID = Meeting.ProjectID
+	-- Distinct removes any duplicate value from the query
+	COUNT(DISTINCT Project.ProjectID) AS TotalProjects,
+	COUNT(Meeting.MeetingID) AS TotalMeetings,
+
+/* 
+	Got CASE from W3Schools as I was going through all the SQL contents and used it as it seemed more convenient to use than the normal IF statement 
+	and as the IF statement was mentioned less frequently in the lecture
+	source: https://www.w3schools.com/sql/sql_case.asp
+*/
+	
+	--Cast displays only 2 values right from the decimal point
+	CAST (
+
+		--CASE returns 0 for consultants who lead no projects, avoiding a divide-by-zero error.
+		CASE 
+		
+			-- source: https://www.geeksforgeeks.org/sql/sql-distinct-clause/
+			WHEN COUNT(DISTINCT Project.ProjectID) = 0 THEN 0 
+
+			-- * 1.0 stops integer division so 3/2 gives 1.5 instead of 1
+			ELSE ROUND((COUNT(Meeting.MeetingID) * 1.0 / COUNT(DISTINCT Project.ProjectID)), 2)
+
+		END AS DECIMAL(10, 2)
+	) 
+	AS AverageMeeting
+
+FROM ConsultantView
+LEFT OUTER JOIN Project ON Project.LeaderID = ConsultantView.ConsultantID
+LEFT OUTER JOIN Meeting ON Project.ProjectID = Meeting.ProjectID
 
 GROUP BY 
-	Meeting.ProjectID,
-	Consultant.ConsultantID,
-	Consultant.FirstName,
-	Consultant.LastName
+	ConsultantView.ConsultantID,
+	ConsultantView.FullName
 
-ORDER BY TotalMeetings DESC
+ORDER BY 
+	TotalMeetings DESC,
+	ConsultantView.FullName ASC
 
 GO
